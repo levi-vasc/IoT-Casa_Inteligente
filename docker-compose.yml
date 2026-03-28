@@ -1,0 +1,14 @@
+services:
+  gateway:
+    build:
+      context: ./gateway   # 👈 entra na pasta gateway
+    container_name: gateway
+    ports:
+      - "8080:8080"
+      - "8081:8081/udp"
+
+  sensors:
+    build:
+      context: ./sensors   # 👈 entra na pasta sensors
+    depends_on:
+      - gateway
