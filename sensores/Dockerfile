@@ -1,9 +1,9 @@
 FROM golang:1.22
 
-WORKDIR /projeto
+WORKDIR /app
 
 COPY . .
 
-RUN go build -o sensores
+RUN go build -o sensors
 
-CMD ["./sensores"]
+CMD ["./sensors"]

@@ -3,102 +3,83 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"math/rand"
 	"net"
 	"time"
 )
 
-type SensorData struct {
-	ID    string  `json:"id"`
-	Tipo  string  `json:"type"`
-	Valor float64 `json:"value"`
+type Sensor struct {
+	ID    string      `json:"id"`
+	Type  string      `json:"type"`
+	Value interface{} `json:"value"`
 }
 
-func gerarValores(tipo string) float64 {
-	switch tipo {
-	case "temperatura":
-		return 20 + rand.Float64()*10
-	case "umidade":
-		return 40 + rand.Float64()*40
-	case "luminosidade":
-		return rand.Float64() * 1000
-	case "presenca":
-		if rand.Intn(2) == 0 {
-			return 0
-		}
-		return 1
-	}
-	return 0
-}
-
-func iniciarSensor(sensor SensorData, intervalo time.Duration) {
-	conn, err := net.Dial("udp", "localhost:8081")
-	if err != nil {
-		fmt.Printf("[ERRO] Sensor %s não conseguiu conectar: %v\n", sensor.ID, err)
-		return
-	}
+func (s *Sensor) SimularTemperatura(gatewayAddr string, intervalo time.Duration) {
+	conn, _ := net.Dial("udp", gatewayAddr)
 	defer conn.Close()
 
-	for {
-		sensor.Valor = gerarValores(sensor.Tipo)
+	// Valor inicial e direção da variação
+	temperatura := 20.0
+	direcao := 1.0 // 1.0 para aumentar, -1.0 para diminuir
+	incremento := 0.2
 
-		dados, err := json.Marshal(sensor)
-		if err != nil {
-			fmt.Printf("[ERRO] Sensor %s falhou ao serializar: %v\n", sensor.ID, err)
-			continue
+	for {
+		s.Value = math.Round(temperatura*100) / 100
+
+		data, _ := json.Marshal(s)
+		conn.Write(data)
+		fmt.Printf("[%s] Enviado: %.2f°C\n", s.ID, s.Value)
+
+		// Atualizar temperatura
+		temperatura += (incremento * direcao)
+
+		// Inverter direção ao atingir limites (18°C a 35°C)
+		if temperatura >= 35 {
+			direcao = -1.0
+		} else if temperatura <= 18 {
+			direcao = 1.0
 		}
 
-		conn.Write(dados)
-		fmt.Printf("[ENVIADO] %s | tipo: %-12s | valor: %.2f\n", sensor.ID, sensor.Tipo, sensor.Valor)
 		time.Sleep(intervalo)
 	}
 }
 
-func iniciarServidor() {
-	addr, _ := net.ResolveUDPAddr("udp", ":8081")
-	conn, err := net.ListenUDP("udp", addr)
-	if err != nil {
-		fmt.Printf("[ERRO] Servidor: %v\n", err)
-		return
-	}
+func (s *Sensor) SimularPresenca(gatewayAddr string) {
+	conn, _ := net.Dial("udp", gatewayAddr)
 	defer conn.Close()
 
-	fmt.Println("[SERVIDOR] Escutando na porta 8081...")
-
-	buf := make([]byte, 1024)
 	for {
-		n, _, err := conn.ReadFromUDP(buf)
-		if err != nil {
-			continue
-		}
+		// Esperar 15 segundos antes de gerar novo valor
+		time.Sleep(15 * time.Second)
 
-		var sensor SensorData
-		if err := json.Unmarshal(buf[:n], &sensor); err != nil {
-			fmt.Printf("[ERRO] Falha ao deserializar: %v\n", err)
-			continue
-		}
+		// Presença: 0 (ausente) ou 1 (presente)
+		s.Value = rand.Intn(2)
 
-		fmt.Printf("[RECEBIDO] %s | tipo: %-12s | valor: %.2f\n", sensor.ID, sensor.Tipo, sensor.Valor)
+		data, _ := json.Marshal(s)
+		conn.Write(data)
+
+		status := "ausente"
+		if s.Value.(int) == 1 {
+			status = "presente"
+		}
+		fmt.Printf("[%s] Enviado: %s\n", s.ID, status)
 	}
 }
 
 func main() {
-	go iniciarServidor()
-	time.Sleep(100 * time.Millisecond) // aguarda servidor subir
+	rand.Seed(time.Now().UnixNano())
 
-	sensors := []struct {
-		dados     SensorData
-		intervalo time.Duration
-	}{
-		{SensorData{"temp01", "temperatura", 0}, 1 * time.Second},
-		{SensorData{"umi01", "umidade", 0}, 2 * time.Second},
-		{SensorData{"luz01", "luminosidade", 0}, 500 * time.Millisecond},
-		{SensorData{"presenca01", "presenca", 0}, 3 * time.Second},
-	}
+	fmt.Println("=== SENSORES INICIADOS ===")
 
-	for _, s := range sensors {
-		go iniciarSensor(s.dados, s.intervalo)
-	}
+	// Sensores de Temperatura - aumenta/diminui 0.2°C a cada 1 segundo
+	go (&Sensor{ID: "temp01", Type: "temperatura"}).SimularTemperatura("localhost:8081", 1*time.Second)
+	go (&Sensor{ID: "temp02", Type: "temperatura"}).SimularTemperatura("localhost:8081", 1*time.Second)
 
+	// Sensores de Presença - gera novo valor a cada 15 segundos
+	go (&Sensor{ID: "pres01", Type: "presenca"}).SimularPresenca("localhost:8081")
+	go (&Sensor{ID: "pres02", Type: "presenca"}).SimularPresenca("localhost:8081")
+
+	fmt.Println("Sensores em execução... Pressione Ctrl+C para parar.")
 	select {}
 }
