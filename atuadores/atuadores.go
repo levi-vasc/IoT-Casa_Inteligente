@@ -5,22 +5,25 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"time"
 )
 
 // ===== COMANDO =====
 type Comando struct {
-	ID     string `json:"id"`
-	Tipo   string `json:"type"`
-	Estado bool   `json:"state"`
-	Auto   bool   `json:"auto"`
+	ID    string `json:"id"`
+	Type  string `json:"type"`
+	State bool   `json:"state"`
+	Auto  bool   `json:"auto"`
 }
 
 // ===== ATUADOR =====
 type Atuador struct {
-	id     string
-	tipo   string
-	estado bool
-	porta  string
+	id          string
+	tipo        string
+	estado      bool
+	porta       string
+	gatewayAddr string
+	gatewayConn net.Conn
 }
 
 func (a *Atuador) simularAcao() {
@@ -46,6 +49,34 @@ func (a *Atuador) simularAcao() {
 	}
 }
 
+func (a *Atuador) conectarGateway() {
+	for {
+		conn, err := net.Dial("tcp", a.gatewayAddr)
+		if err != nil {
+			fmt.Printf("[%s] Tentando conectar ao gateway...\n", a.id)
+			time.Sleep(2 * time.Second)
+			continue
+		}
+		a.gatewayConn = conn
+		fmt.Printf("[%s] Conectado ao gateway\n", a.id)
+
+		// Enviar ID para identificação
+		conn.Write([]byte(a.id))
+
+		// Manter conexão aberta
+		buf := make([]byte, 1024)
+		for {
+			n, err := conn.Read(buf)
+			if err != nil || n == 0 {
+				break
+			}
+		}
+		fmt.Printf("[%s] Conexão com gateway perdida\n", a.id)
+		conn.Close()
+		time.Sleep(2 * time.Second)
+	}
+}
+
 func (a *Atuador) iniciar() {
 	listener, err := net.Listen("tcp", ":"+a.porta)
 	if err != nil {
@@ -67,33 +98,37 @@ func (a *Atuador) iniciar() {
 
 func (a *Atuador) receberComandos(conn net.Conn) {
 	defer conn.Close()
-	fmt.Printf("[%s] Gateway conectado: %s\n", a.id, conn.RemoteAddr())
+	fmt.Printf("[%s] Gateway/Cliente conectado: %s\n", a.id, conn.RemoteAddr())
 
 	scanner := bufio.NewScanner(conn)
 	for scanner.Scan() {
 		var cmd Comando
 		if err := json.Unmarshal(scanner.Bytes(), &cmd); err != nil {
-			fmt.Printf("[ERRO] %s falhou ao ler comando: %v\n", a.id, err)
 			continue
 		}
 
-		a.estado = cmd.Estado
+		a.estado = cmd.State
 		a.simularAcao()
 	}
 }
 
 func main() {
 	atuadores := []Atuador{
-		{id: "ar01", tipo: "ar", estado: false, porta: "9001"},
-		{id: "luz01", tipo: "luz", estado: false, porta: "9002"},
-		{id: "porta01", tipo: "porta", estado: false, porta: "9003"},
+		{id: "ar01", tipo: "ar", estado: false, porta: "9001", gatewayAddr: "localhost:9000"},
+		{id: "luz01", tipo: "luz", estado: false, porta: "9002", gatewayAddr: "localhost:9000"},
+		{id: "porta01", tipo: "porta", estado: false, porta: "9003", gatewayAddr: "localhost:9000"},
 	}
 
-	done := make(chan struct{})
+	fmt.Println("=== ATUADORES INICIADOS ===")
 
 	for i := range atuadores {
+		// Conectar com gateway para receber comandos automáticos
+		go atuadores[i].conectarGateway()
+
+		// Escutar comandos locais na porta
 		go atuadores[i].iniciar()
 	}
 
-	<-done
+	fmt.Println("Atuadores aguardando comandos... Pressione Ctrl+C para parar.")
+	select {}
 }
