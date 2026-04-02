@@ -1,14 +1,38 @@
 services:
   gateway:
     build:
-      context: ./gateway   # 👈 entra na pasta gateway
+      context: ./gateway
     container_name: gateway
     ports:
       - "8080:8080"
       - "8081:8081/udp"
+      - "9000:9000"
 
   sensors:
     build:
-      context: ./sensors   # 👈 entra na pasta sensors
+      context: ./sensors
+    container_name: sensors
     depends_on:
       - gateway
+    environment:
+      - GATEWAY_ADDR=gateway:8081
+
+  actuators:
+    build:
+      context: ./actuators
+    container_name: actuators
+    depends_on:
+      - gateway
+    environment:
+      - GATEWAY_ADDR=gateway:9000
+
+  client:
+    build:
+      context: ./client
+    container_name: client
+    depends_on:
+      - gateway
+    stdin_open: true
+    tty: true
+    environment:
+      - GATEWAY_ADDR=gateway:8080

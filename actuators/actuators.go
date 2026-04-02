@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"os"
 	"time"
 )
 
-// ===== COMANDO =====
 type Comando struct {
 	ID    string `json:"id"`
 	Type  string `json:"type"`
@@ -16,7 +16,6 @@ type Comando struct {
 	Auto  bool   `json:"auto"`
 }
 
-// ===== ATUADOR =====
 type Atuador struct {
 	id          string
 	tipo        string
@@ -40,12 +39,6 @@ func (a *Atuador) simularAcao() {
 		} else {
 			fmt.Printf("[%s] ⭕ Lâmpada DESLIGADA\n", a.id)
 		}
-	case "porta":
-		if a.estado {
-			fmt.Printf("[%s] 🔓 Porta ABERTA\n", a.id)
-		} else {
-			fmt.Printf("[%s] 🔒 Porta FECHADA\n", a.id)
-		}
 	}
 }
 
@@ -60,10 +53,8 @@ func (a *Atuador) conectarGateway() {
 		a.gatewayConn = conn
 		fmt.Printf("[%s] Conectado ao gateway\n", a.id)
 
-		// Enviar ID para identificação
 		conn.Write([]byte(a.id))
 
-		// Manter conexão aberta
 		buf := make([]byte, 1024)
 		for {
 			n, err := conn.Read(buf)
@@ -113,19 +104,20 @@ func (a *Atuador) receberComandos(conn net.Conn) {
 }
 
 func main() {
+	gatewayAddr := os.Getenv("GATEWAY_ADDR")
+	if gatewayAddr == "" {
+		gatewayAddr = "localhost:9000"
+	}
+
 	atuadores := []Atuador{
-		{id: "ar01", tipo: "ar", estado: false, porta: "9001", gatewayAddr: "localhost:9000"},
-		{id: "luz01", tipo: "luz", estado: false, porta: "9002", gatewayAddr: "localhost:9000"},
-		{id: "porta01", tipo: "porta", estado: false, porta: "9003", gatewayAddr: "localhost:9000"},
+		{id: "ar01", tipo: "ar", estado: false, porta: "9001", gatewayAddr: gatewayAddr},
+		{id: "luz01", tipo: "luz", estado: false, porta: "9002", gatewayAddr: gatewayAddr},
 	}
 
 	fmt.Println("=== ATUADORES INICIADOS ===")
 
 	for i := range atuadores {
-		// Conectar com gateway para receber comandos automáticos
 		go atuadores[i].conectarGateway()
-
-		// Escutar comandos locais na porta
 		go atuadores[i].iniciar()
 	}
 

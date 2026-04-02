@@ -10,7 +10,12 @@ import (
 )
 
 func main() {
-	conn, err := net.Dial("tcp", "localhost:8080")
+	gatewayAddr := os.Getenv("GATEWAY_ADDR")
+	if gatewayAddr == "" {
+		gatewayAddr = "localhost:8080"
+	}
+
+	conn, err := net.Dial("tcp", gatewayAddr)
 	if err != nil {
 		fmt.Println("Erro ao conectar ao Gateway:", err)
 		return
@@ -20,7 +25,6 @@ func main() {
 	fmt.Println("=== CLIENTE ROTA DAS COISAS ===")
 	fmt.Println("Comandos: ligar <id> | desligar <id>")
 
-	// Thread para receber dados em tempo real (Monitoramento) [cite: 23]
 	go func() {
 		scanner := bufio.NewScanner(conn)
 		for scanner.Scan() {
@@ -28,7 +32,6 @@ func main() {
 		}
 	}()
 
-	// Loop principal para envio de comandos
 	reader := bufio.NewReader(os.Stdin)
 	for {
 		fmt.Print("> ")

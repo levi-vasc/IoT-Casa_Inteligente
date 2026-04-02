@@ -4,6 +4,7 @@ WORKDIR /app
 
 COPY . .
 
-RUN go build -o sensores
+RUN go mod init actuators
+RUN go build -o actuators
 
-CMD ["./sensores"]
+CMD ["./actuators"]
