@@ -6,6 +6,7 @@ services:
     ports:
       - "8080:8080"      # Clientes TCP
       - "8081:8081/udp"  # Sensores UDP
+      - "8082:8082"      # API HTTP histórico
       - "9000:9000"      # Atuadores TCP
       - "9001:9001"      # Consulta de Estado TCP
     networks:

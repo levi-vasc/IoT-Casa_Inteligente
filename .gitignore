@@ -1,0 +1,10 @@
+# Compiled binaries
+gateway
+sensor_temp
+sensor_pres
+actuator_ac
+actuator_light
+client
+
+# SQLite database files
+*.db

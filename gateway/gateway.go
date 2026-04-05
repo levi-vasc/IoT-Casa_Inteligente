@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"net/http"
+	"os"
+	"strings"
 	"sync"
 	"time"
 )
@@ -42,16 +45,29 @@ var sensorParaAtuador = map[string]string{
 }
 
 func main() {
+	// Inicializa o banco de dados SQLite.
+	dbPath := os.Getenv("DB_PATH")
+	if dbPath == "" {
+		dbPath = "sensor_readings.db"
+	}
+	if err := initDB(dbPath); err != nil {
+		fmt.Printf("[GATEWAY] %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("[GATEWAY] Banco de dados SQLite aberto em %q\n", dbPath)
+
 	go startUDPServer(":8081")
 	go startTCPServer(":8080")
 	go startAtuadoresServer(":9000")
 	go startEstadoServer(":9001")
+	go startHTTPServer(":8082")
 
 	fmt.Println("[GATEWAY] Sistema iniciado com sucesso")
 	fmt.Println("[GATEWAY] Sensores (UDP)           -> :8081")
 	fmt.Println("[GATEWAY] Clientes (TCP)           -> :8080")
 	fmt.Println("[GATEWAY] Atuadores (TCP)          -> :9000")
 	fmt.Println("[GATEWAY] Consulta de estado (TCP) -> :9001")
+	fmt.Println("[GATEWAY] Histórico HTTP           -> :8082")
 	select {}
 }
 
@@ -86,6 +102,8 @@ func startUDPServer(port string) {
 		cacheMutex.Unlock()
 
 		fmt.Printf("[SENSOR] %s (%s): %v\n", data.ID, data.Type, data.Value)
+
+		salvarLeitura(data)
 
 		processarAutomacao(data)
 
@@ -338,4 +356,88 @@ func publicarEstadoAtuador(atuadorID string, estado bool) {
 	}
 	notif = append(notif, '\n')
 	broadcastToClients(notif)
+}
+
+// ─── HTTP: histórico de leituras para visualização em gráficos ────────────────
+//
+// Endpoint: GET /sensors/{id}/history?from=<RFC3339>&to=<RFC3339>
+//
+// Parâmetros de query:
+//   - from (obrigatório): início do intervalo em formato RFC3339 (ex: 2024-01-01T00:00:00Z)
+//   - to   (obrigatório): fim do intervalo em formato RFC3339
+//
+// Resposta JSON:
+//
+//	{"sensor_id":"temp01","from":"...","to":"...","readings":[{"timestamp":"...","value":24.5,"type":"temperatura"},...]}
+
+func startHTTPServer(port string) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/sensors/", handleHistory)
+
+	fmt.Printf("[GATEWAY] Escutando API HTTP na porta %s\n", port)
+	if err := http.ListenAndServe(port, mux); err != nil {
+		fmt.Printf("[GATEWAY] Erro no servidor HTTP: %v\n", err)
+	}
+}
+
+func handleHistory(w http.ResponseWriter, r *http.Request) {
+	// Aceita apenas GET.
+	if r.Method != http.MethodGet {
+		http.Error(w, "método não permitido", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Extrai o sensor ID do caminho: /sensors/{id}/history
+	path := strings.TrimPrefix(r.URL.Path, "/sensors/")
+	parts := strings.SplitN(path, "/", 2)
+	if len(parts) != 2 || parts[1] != "history" {
+		http.Error(w, "caminho inválido; use /sensors/{id}/history", http.StatusNotFound)
+		return
+	}
+	sensorID := parts[0]
+	if sensorID == "" {
+		http.Error(w, "sensor_id não informado", http.StatusBadRequest)
+		return
+	}
+
+	q := r.URL.Query()
+	fromStr := q.Get("from")
+	toStr := q.Get("to")
+
+	if fromStr == "" || toStr == "" {
+		http.Error(w, "parâmetros 'from' e 'to' são obrigatórios (formato RFC3339)", http.StatusBadRequest)
+		return
+	}
+
+	from, err := time.Parse(time.RFC3339, fromStr)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("'from' inválido: %v", err), http.StatusBadRequest)
+		return
+	}
+	to, err := time.Parse(time.RFC3339, toStr)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("'to' inválido: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	leituras, err := buscarHistorico(sensorID, from, to)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("erro ao buscar histórico: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// Garante array vazio em vez de null quando não há leituras.
+	if leituras == nil {
+		leituras = []Leitura{}
+	}
+
+	resp := map[string]interface{}{
+		"sensor_id": sensorID,
+		"from":      from.Format(time.RFC3339),
+		"to":        to.Format(time.RFC3339),
+		"readings":  leituras,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
 }
