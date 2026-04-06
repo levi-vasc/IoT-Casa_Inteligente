@@ -4,11 +4,9 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
-	"math"
 	"math/rand"
 	"net"
 	"os"
-	"strconv"
 	"time"
 )
 
@@ -47,7 +45,7 @@ func consultarArLigado(sensorID, estadoAddr string) bool {
 	return resp.Ligado
 }
 
-func (s *Sensor) SimularTemperatura(gatewayUDPAddr, gatewayEstadoAddr string, intervalo time.Duration) {
+func (s *Sensor) SimularTemperatura(gatewayUDPAddr string, intervalo time.Duration) {
 	for {
 		udpConn, err := net.Dial("udp", gatewayUDPAddr)
 		if err != nil {
@@ -56,40 +54,37 @@ func (s *Sensor) SimularTemperatura(gatewayUDPAddr, gatewayEstadoAddr string, in
 			continue
 		}
 
-		temperatura := 24.0 + rand.Float64()*4.0
-		direcao := 1.0
-		incremento := 0.2
+		// Começa numa faixa realista
+		temperatura := 24.0 + rand.Float64()*2.0 // 24..26
+
+		// Limites de oscilação natural
+		minT := 18.0
+		maxT := 35.0
 
 		fmt.Printf("[%s] Conectado ao gateway %s\n", s.ID, gatewayUDPAddr)
 
 		for {
-			arLigado := consultarArLigado(s.ID, gatewayEstadoAddr)
+			// Delta pequeno para evitar saltos bruscos
+			delta := (rand.Float64()*2 - 1) * 0.5 // -0.3..+0.3
 
-			if arLigado {
-				// Ar ligado: aproxima de 20°C, mas mantém leve variação natural.
-				if temperatura > 20.0 {
-					temperatura -= 0.5
-				} else if temperatura < 20.0 {
-					temperatura += 0.1
-				}
-				temperatura += (rand.Float64() - 0.5) * 0.08
-				if temperatura < 19.5 {
-					temperatura = 19.5
-				} else if temperatura > 21.0 {
-					temperatura = 21.0
-				}
-				direcao = 1.0
-			} else {
-				// Ar desligado: oscila naturalmente entre 18°C e 35°C
-				temperatura += incremento * direcao
-				if temperatura >= 35 {
-					direcao = -1.0
-				} else if temperatura <= 18 {
-					direcao = 1.0
-				}
+			// “Força” suave para voltar ao meio quando estiver nos extremos
+			if temperatura > 33.0 {
+				delta -= 0.2
+			} else if temperatura < 20.0 {
+				delta += 0.2
 			}
 
-			s.Value = math.Round(temperatura*100) / 100
+			temperatura += delta
+
+			// Clamp
+			if temperatura < minT {
+				temperatura = minT
+			} else if temperatura > maxT {
+				temperatura = maxT
+			}
+
+			// Arredonda para 2 casas
+			s.Value = float64(int(temperatura*100)) / 100
 
 			data, err := json.Marshal(s)
 			if err != nil {
@@ -102,12 +97,7 @@ func (s *Sensor) SimularTemperatura(gatewayUDPAddr, gatewayEstadoAddr string, in
 				break
 			}
 
-			arStatus := "desligado"
-			if arLigado {
-				arStatus = "LIGADO ❄️"
-			}
-			fmt.Printf("[%s] %.2f°C  (ar: %s)\n", s.ID, temperatura, arStatus)
-
+			fmt.Printf("[%s] %.2f°C\n", s.ID, temperatura)
 			time.Sleep(intervalo)
 		}
 
@@ -124,27 +114,12 @@ func main() {
 		gatewayAddr = "localhost:8081"
 	}
 
-	estadoAddr := os.Getenv("GATEWAY_ESTADO_ADDR")
-	if estadoAddr == "" {
-		host, _, _ := net.SplitHostPort(gatewayAddr)
-		if host == "" {
-			host = "localhost"
-		}
-		estadoAddr = host + ":9001"
-	}
-
 	sensorID := os.Getenv("SENSOR_ID")
 	if sensorID == "" {
 		sensorID = "temp01"
 	}
 
-	intervaloStr := os.Getenv("INTERVALO_MS")
 	intervalo := 1000
-	if intervaloStr != "" {
-		if v, err := strconv.Atoi(intervaloStr); err == nil {
-			intervalo = v
-		}
-	}
 
 	sensor := &Sensor{
 		ID:   sensorID,
@@ -153,8 +128,7 @@ func main() {
 
 	fmt.Printf("=== SENSOR TEMPERATURA [%s] INICIADO ===\n", sensorID)
 	fmt.Printf("Gateway UDP:    %s\n", gatewayAddr)
-	fmt.Printf("Gateway Estado: %s\n", estadoAddr)
 	fmt.Printf("Intervalo:      %dms\n", intervalo)
 
-	sensor.SimularTemperatura(gatewayAddr, estadoAddr, time.Duration(intervalo)*time.Millisecond)
+	sensor.SimularTemperatura(gatewayAddr, time.Duration(intervalo)*time.Millisecond)
 }

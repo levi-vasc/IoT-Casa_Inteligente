@@ -7,7 +7,6 @@ services:
       - "8080:8080"      # Clientes TCP
       - "8081:8081/udp"  # Sensores UDP
       - "9000:9000"      # Atuadores TCP
-      - "9001:9001"      # Consulta de Estado TCP
     networks:
       - iot_net
 
@@ -18,9 +17,7 @@ services:
     depends_on: [gateway]
     environment:
       - GATEWAY_ADDR=gateway:8081
-      - GATEWAY_ESTADO_ADDR=gateway:9001
       - SENSOR_ID=temp01
-      - INTERVALO_MS=1000
     networks:
       - iot_net
 
@@ -30,9 +27,7 @@ services:
     depends_on: [gateway]
     environment:
       - GATEWAY_ADDR=gateway:8081
-      - GATEWAY_ESTADO_ADDR=gateway:9001
       - SENSOR_ID=temp02
-      - INTERVALO_MS=1000
     networks:
       - iot_net
 
@@ -44,7 +39,6 @@ services:
     environment:
       - GATEWAY_ADDR=gateway:8081
       - SENSOR_ID=pres01
-      - INTERVALO_MS=1000
     networks:
       - iot_net
 
@@ -55,7 +49,6 @@ services:
     environment:
       - GATEWAY_ADDR=gateway:8081
       - SENSOR_ID=pres02
-      - INTERVALO_MS=1000
     networks:
       - iot_net
 

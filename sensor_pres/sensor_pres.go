@@ -6,7 +6,6 @@ import (
 	"math/rand"
 	"net"
 	"os"
-	"strconv"
 	"time"
 )
 
@@ -82,13 +81,7 @@ func main() {
 		sensorID = "pres01"
 	}
 
-	intervaloStr := os.Getenv("INTERVALO_MS")
 	intervalo := 1000
-	if intervaloStr != "" {
-		if v, err := strconv.Atoi(intervaloStr); err == nil {
-			intervalo = v
-		}
-	}
 
 	sensor := &Sensor{
 		ID:   sensorID,
