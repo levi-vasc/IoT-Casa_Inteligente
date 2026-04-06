@@ -1,38 +1,111 @@
 services:
   gateway:
-    build:
-      context: ./gateway
+    build: ./gateway
     container_name: gateway
+    restart: unless-stopped
     ports:
-      - "8080:8080"
-      - "8081:8081/udp"
-      - "9000:9000"
+      - "8080:8080"      # Clientes TCP
+      - "8081:8081/udp"  # Sensores UDP
+      - "9000:9000"      # Atuadores TCP
+    networks:
+      - iot_net
 
-  sensors:
-    build:
-      context: ./sensors
-    container_name: sensors
-    depends_on:
-      - gateway
+  # ---- SENSORES DE TEMPERATURA ----
+  temp01:
+    build: ./sensor_temp
+    container_name: temp01
+    depends_on: [gateway]
     environment:
       - GATEWAY_ADDR=gateway:8081
+      - SENSOR_ID=temp01
+    networks:
+      - iot_net
 
-  actuators:
-    build:
-      context: ./actuators
-    container_name: actuators
-    depends_on:
-      - gateway
+  temp02:
+    build: ./sensor_temp
+    container_name: temp02
+    depends_on: [gateway]
+    environment:
+      - GATEWAY_ADDR=gateway:8081
+      - SENSOR_ID=temp02
+    networks:
+      - iot_net
+
+  # ---- SENSORES DE PRESENÇA ----
+  pres01:
+    build: ./sensor_pres
+    container_name: pres01
+    depends_on: [gateway]
+    environment:
+      - GATEWAY_ADDR=gateway:8081
+      - SENSOR_ID=pres01
+    networks:
+      - iot_net
+
+  pres02:
+    build: ./sensor_pres
+    container_name: pres02
+    depends_on: [gateway]
+    environment:
+      - GATEWAY_ADDR=gateway:8081
+      - SENSOR_ID=pres02
+    networks:
+      - iot_net
+
+  # ---- ATUADORES DE AR-CONDICIONADO ----
+  ar01:
+    build: ./actuator_ac
+    container_name: ar01
+    depends_on: [gateway]
     environment:
       - GATEWAY_ADDR=gateway:9000
+      - ATUADOR_ID=ar01
+    networks:
+      - iot_net
 
+  ar02:
+    build: ./actuator_ac
+    container_name: ar02
+    depends_on: [gateway]
+    environment:
+      - GATEWAY_ADDR=gateway:9000
+      - ATUADOR_ID=ar02
+    networks:
+      - iot_net
+
+  # ---- ATUADORES DE ILUMINAÇÃO ----
+  luz01:
+    build: ./actuator_light
+    container_name: luz01
+    depends_on: [gateway]
+    environment:
+      - GATEWAY_ADDR=gateway:9000
+      - ATUADOR_ID=luz01
+    networks:
+      - iot_net
+
+  luz02:
+    build: ./actuator_light
+    container_name: luz02
+    depends_on: [gateway]
+    environment:
+      - GATEWAY_ADDR=gateway:9000
+      - ATUADOR_ID=luz02
+    networks:
+      - iot_net
+
+  # ---- CLIENTE INTERATIVO ----
   client:
-    build:
-      context: ./client
+    build: ./client
     container_name: client
-    depends_on:
-      - gateway
+    depends_on: [gateway]
     stdin_open: true
     tty: true
     environment:
       - GATEWAY_ADDR=gateway:8080
+    networks:
+      - iot_net
+
+networks:
+  iot_net:
+    driver: bridge

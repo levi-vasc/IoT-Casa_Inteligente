@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -16,15 +17,30 @@ type DeviceData struct {
 }
 
 var (
-	cache             = make(map[string]DeviceData)
-	cacheMutex        sync.RWMutex
-	clients           = make(map[net.Conn]bool)
-	clientMux         sync.Mutex
-	atuadoresConn     = make(map[string]net.Conn)
-	atuadoresMutex    sync.Mutex
-	ultimoComandoTemp = make(map[string]time.Time)
-	ultimoComandoPres = make(map[string]time.Time)
+	cache          = make(map[string]DeviceData)
+	cacheMutex     sync.RWMutex
+	clients        = make(map[net.Conn]bool)
+	clientMux      sync.Mutex
+	atuadoresConn  = make(map[string]net.Conn)
+	atuadoresMutex sync.Mutex
+
+	ultimoComando   = make(map[string]time.Time)
+	ultimoComandoMu sync.Mutex
+
+	estadoAtuador = make(map[string]bool)
+	estadoMutex   sync.RWMutex
+
+	// Override de luz via cliente (bloqueia automação por um tempo)
+	luzOverrideAte   = make(map[string]time.Time) // ex: "luz01" -> now+5s
+	luzOverrideMutex sync.Mutex
 )
+
+var sensorParaAtuador = map[string]string{
+	"temp01": "ar01",
+	"temp02": "ar02",
+	"pres01": "luz01",
+	"pres02": "luz02",
+}
 
 func main() {
 	go startUDPServer(":8081")
@@ -32,50 +48,99 @@ func main() {
 	go startAtuadoresServer(":9000")
 
 	fmt.Println("[GATEWAY] Sistema iniciado com sucesso")
+	fmt.Println("[GATEWAY] Sensores (UDP)  -> :8081")
+	fmt.Println("[GATEWAY] Clientes (TCP)  -> :8080")
+	fmt.Println("[GATEWAY] Atuadores (TCP) -> :9000")
 	select {}
 }
 
+// ─── UDP: recebe dados dos sensores ───────────────────────────────────────────
+
 func startUDPServer(port string) {
 	addr, _ := net.ResolveUDPAddr("udp", port)
-	conn, _ := net.ListenUDP("udp", addr)
+	conn, err := net.ListenUDP("udp", addr)
+	if err != nil {
+		fmt.Printf("[GATEWAY] Erro ao abrir UDP %s: %v\n", port, err)
+		return
+	}
 	defer conn.Close()
 
 	fmt.Printf("[GATEWAY] Escutando Sensores (UDP) na porta %s\n", port)
 	buf := make([]byte, 1024)
 
 	for {
-		n, _, err := conn.ReadFromUDP(buf)
+		n, remoteAddr, err := conn.ReadFromUDP(buf)
 		if err != nil {
 			continue
 		}
 
 		var data DeviceData
-		if err := json.Unmarshal(buf[:n], &data); err == nil {
-			cacheMutex.Lock()
-			cache[data.ID] = data
-			cacheMutex.Unlock()
-
-			fmt.Printf("[SENSOR] %s (%s): %v\n", data.ID, data.Type, data.Value)
-			processarAutomacao(data)
-			broadcastToClients(buf[:n])
+		if err := json.Unmarshal(buf[:n], &data); err != nil {
+			fmt.Printf("[GATEWAY] Pacote UDP inválido de %s: %v\n", remoteAddr, err)
+			continue
 		}
+
+		cacheMutex.Lock()
+		cache[data.ID] = data
+		cacheMutex.Unlock()
+
+		fmt.Printf("[SENSOR] %s (%s): %v\n", data.ID, data.Type, data.Value)
+
+		processarAutomacao(data)
+
+		payload, _ := json.Marshal(data)
+		broadcastToClients(payload)
 	}
 }
+
+// ─── Lógica de automação ──────────────────────────────────────────────────────
 
 func processarAutomacao(data DeviceData) {
+	atuadorID, vinculado := sensorParaAtuador[data.ID]
+	if !vinculado {
+		return
+	}
+
 	switch data.Type {
 	case "temperatura":
-		if temp, ok := data.Value.(float64); ok && temp > 30 {
-			enviarComandoAtuador("ar01", true, data.ID)
+		temp, ok := data.Value.(float64)
+		if !ok {
+			return
 		}
+
+		// Histerese:
+		// - Liga quando temp >= 26
+		// - Desliga quando temp <= 20
+		// - Entre 20 e 26, mantém estado atual (não envia comando)
+		estadoMutex.RLock()
+		ligado := estadoAtuador[atuadorID]
+		estadoMutex.RUnlock()
+
+		if !ligado && temp >= 26.0 {
+			enviarComandoAtuador(atuadorID, true, data.ID)
+		} else if ligado && temp <= 20.0 {
+			enviarComandoAtuador(atuadorID, false, data.ID)
+		}
+
 	case "presenca":
-		if presenca, ok := data.Value.(float64); ok && presenca == 1 {
-			enviarComandoAtuador("luz01", true, data.ID)
+		presencaF, ok := data.Value.(float64)
+		if !ok {
+			fmt.Printf("[GATEWAY] Valor de presença inválido (%T) para %s: %v\n", data.Value, data.ID, data.Value)
+			return
 		}
+
+		ligar := presencaF == 1
+
+		// Se cliente comandou luz recentemente, ignora automação por 5s
+		if (atuadorID == "luz01" || atuadorID == "luz02") && luzEmOverride(atuadorID) {
+			return
+		}
+
+		enviarComandoAtuador(atuadorID, ligar, data.ID)
 	}
 }
 
-func enviarComandoAtuador(atuadorID string, estado bool, sensorID string) {
+func enviarComandoAtuador(atuadorID string, estado bool, origem string) {
 	atuadoresMutex.Lock()
 	conn, exists := atuadoresConn[atuadorID]
 	atuadoresMutex.Unlock()
@@ -85,16 +150,17 @@ func enviarComandoAtuador(atuadorID string, estado bool, sensorID string) {
 		return
 	}
 
-	chave := atuadorID + "_" + fmt.Sprintf("%v", estado)
+	// Anti-spam: evita repetir o mesmo comando num intervalo curto
+	chave := fmt.Sprintf("%s_%v", atuadorID, estado)
 	agora := time.Now()
 
-	if ultima, exists := ultimoComandoTemp[chave]; exists {
-		if agora.Sub(ultima) < 5*time.Second {
-			return
-		}
+	ultimoComandoMu.Lock()
+	if ultima, existe := ultimoComando[chave]; existe && agora.Sub(ultima) < 5*time.Second {
+		ultimoComandoMu.Unlock()
+		return
 	}
-
-	ultimoComandoTemp[chave] = agora
+	ultimoComando[chave] = agora
+	ultimoComandoMu.Unlock()
 
 	cmd := DeviceData{
 		ID:    atuadorID,
@@ -104,13 +170,112 @@ func enviarComandoAtuador(atuadorID string, estado bool, sensorID string) {
 	cmdJSON, _ := json.Marshal(cmd)
 	cmdJSON = append(cmdJSON, '\n')
 
-	if _, err := conn.Write(cmdJSON); err == nil {
-		fmt.Printf("[AUTOMAÇÃO] ✓ %s ativado por %s (estado: %v)\n", atuadorID, sensorID, estado)
+	if _, err := conn.Write(cmdJSON); err != nil {
+		fmt.Printf("[AUTOMAÇÃO] Erro ao enviar para %s: %v\n", atuadorID, err)
+
+		atuadoresMutex.Lock()
+		delete(atuadoresConn, atuadorID)
+		atuadoresMutex.Unlock()
+
+		estadoMutex.Lock()
+		delete(estadoAtuador, atuadorID)
+		estadoMutex.Unlock()
+
+		return
+	}
+
+	// Atualiza estado e notifica clientes
+	estadoMutex.Lock()
+	estadoAtuador[atuadorID] = estado
+	estadoMutex.Unlock()
+
+	publicarEstadoAtuador(atuadorID, estado)
+	logEstadoAtuador(atuadorID, estado, origem)
+}
+
+func logEstadoAtuador(atuadorID string, estado bool, origem string) {
+	sufixo := "DESLIGADO"
+	if estado {
+		sufixo = "LIGADO"
+	}
+
+	switch atuadorID {
+	case "ar01", "ar02":
+		fmt.Printf("[ATUADOR] [%s] ❄️  Ar-condicionado %s (origem: %s)\n", atuadorID, sufixo, origem)
+	case "luz01", "luz02":
+		fmt.Printf("[ATUADOR] [%s] 💡 Lâmpada %s (origem: %s)\n", atuadorID, sufixo, origem)
+	default:
+		fmt.Printf("[ATUADOR] [%s] %s (origem: %s)\n", atuadorID, sufixo, origem)
 	}
 }
 
+// ─── TCP: registra atuadores e mantém canal de comandos aberto ────────────────
+
+func startAtuadoresServer(port string) {
+	ln, err := net.Listen("tcp", port)
+	if err != nil {
+		fmt.Printf("[GATEWAY] Erro ao abrir porta TCP %s: %v\n", port, err)
+		return
+	}
+	fmt.Printf("[GATEWAY] Escutando Atuadores (TCP) na porta %s\n", port)
+
+	for {
+		conn, err := ln.Accept()
+		if err != nil {
+			continue
+		}
+		go handleAtuador(conn)
+	}
+}
+
+func handleAtuador(conn net.Conn) {
+	defer conn.Close()
+
+	scanner := bufio.NewScanner(conn)
+
+	// Primeira linha: ID do atuador
+	if !scanner.Scan() {
+		fmt.Printf("[GATEWAY] Atuador de %s não enviou ID\n", conn.RemoteAddr())
+		return
+	}
+	atuadorID := scanner.Text()
+	if atuadorID == "" {
+		fmt.Printf("[GATEWAY] Atuador de %s enviou ID vazio\n", conn.RemoteAddr())
+		return
+	}
+
+	atuadoresMutex.Lock()
+	atuadoresConn[atuadorID] = conn
+	atuadoresMutex.Unlock()
+
+	estadoMutex.Lock()
+	if _, existe := estadoAtuador[atuadorID]; !existe {
+		estadoAtuador[atuadorID] = false
+	}
+	estadoMutex.Unlock()
+
+	fmt.Printf("[GATEWAY] Atuador registrado: %s (de %s)\n", atuadorID, conn.RemoteAddr())
+
+	// Mantém a goroutine viva — scanner.Scan() retorna false quando a conexão fechar.
+	for scanner.Scan() {
+		// Atuadores não enviam dados além do ID; ignorar qualquer linha extra.
+	}
+
+	atuadoresMutex.Lock()
+	delete(atuadoresConn, atuadorID)
+	atuadoresMutex.Unlock()
+
+	fmt.Printf("[GATEWAY] Atuador desconectado: %s\n", atuadorID)
+}
+
+// ─── TCP: recebe comandos dos clientes ────────────────────────────────────────
+
 func startTCPServer(port string) {
-	ln, _ := net.Listen("tcp", port)
+	ln, err := net.Listen("tcp", port)
+	if err != nil {
+		fmt.Printf("[GATEWAY] Erro ao abrir porta TCP %s: %v\n", port, err)
+		return
+	}
 	fmt.Printf("[GATEWAY] Escutando Clientes (TCP) na porta %s\n", port)
 
 	for {
@@ -118,6 +283,7 @@ func startTCPServer(port string) {
 		if err != nil {
 			continue
 		}
+
 		clientMux.Lock()
 		clients[conn] = true
 		clientMux.Unlock()
@@ -143,56 +309,57 @@ func handleClient(conn net.Conn) {
 			break
 		}
 
-		fmt.Printf("[COMANDO] Recebido para %s: %v\n", cmd.ID, cmd.State)
+		fmt.Printf("[COMANDO] Recebido de %s → id=%s state=%v\n", conn.RemoteAddr(), cmd.ID, cmd.State)
+
+		// Se for luz, prioridade ao cliente por 5s
+		if cmd.ID == "luz01" || cmd.ID == "luz02" {
+			setLuzOverride(cmd.ID, 5*time.Second)
+		}
+
 		enviarComandoAtuador(cmd.ID, cmd.State, "cliente")
-		broadcastToClients([]byte(fmt.Sprintf("{\"id\":\"%s\",\"state\":%v}\n", cmd.ID, cmd.State)))
-	}
-}
-
-func startAtuadoresServer(port string) {
-	ln, _ := net.Listen("tcp", port)
-	fmt.Printf("[GATEWAY] Escutando Atuadores (TCP) na porta %s\n", port)
-
-	for {
-		conn, err := ln.Accept()
-		if err != nil {
-			continue
-		}
-		go handleAtuador(conn)
-	}
-}
-
-func handleAtuador(conn net.Conn) {
-	defer conn.Close()
-
-	buf := make([]byte, 256)
-	n, _ := conn.Read(buf)
-	atuadorID := string(buf[:n])
-
-	atuadoresMutex.Lock()
-	atuadoresConn[atuadorID] = conn
-	atuadoresMutex.Unlock()
-
-	fmt.Printf("[GATEWAY] Atuador conectado: %s\n", atuadorID)
-
-	for {
-		n, err := conn.Read(buf)
-		if err != nil || n == 0 {
-			break
-		}
 	}
 
-	atuadoresMutex.Lock()
-	delete(atuadoresConn, atuadorID)
-	atuadoresMutex.Unlock()
-
-	fmt.Printf("[GATEWAY] Atuador desconectado: %s\n", atuadorID)
+	fmt.Printf("[GATEWAY] Cliente desconectado: %s\n", conn.RemoteAddr())
 }
+
+// ─── Broadcast / Estado ───────────────────────────────────────────────────────
 
 func broadcastToClients(data []byte) {
 	clientMux.Lock()
 	defer clientMux.Unlock()
 	for conn := range clients {
-		conn.Write(data)
+		_, _ = conn.Write(data)
 	}
+}
+
+func publicarEstadoAtuador(atuadorID string, estado bool) {
+	notif, err := json.Marshal(DeviceData{ID: atuadorID, Type: "estado", State: estado})
+	if err != nil {
+		return
+	}
+	notif = append(notif, '\n')
+	broadcastToClients(notif)
+}
+
+// ─── Override de luz (cliente) ────────────────────────────────────────────────
+
+func setLuzOverride(atuadorID string, d time.Duration) {
+	luzOverrideMutex.Lock()
+	luzOverrideAte[atuadorID] = time.Now().Add(d)
+	luzOverrideMutex.Unlock()
+}
+
+func luzEmOverride(atuadorID string) bool {
+	luzOverrideMutex.Lock()
+	defer luzOverrideMutex.Unlock()
+
+	t, ok := luzOverrideAte[atuadorID]
+	if !ok {
+		return false
+	}
+	if time.Now().After(t) {
+		delete(luzOverrideAte, atuadorID)
+		return false
+	}
+	return true
 }
