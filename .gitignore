@@ -1,0 +1,8 @@
+# Arquivo de configuração local (gerado a partir de .env.example)
+.env
+
+# Binário compilado do gateway
+gateway/gateway
+
+# Arquivos de ambiente local do gateway
+gateway/.env.local

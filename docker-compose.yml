@@ -1,110 +1,114 @@
-services:
-  gateway:
-    build: ./gateway
-    container_name: gateway
-    restart: unless-stopped
-    ports:
-      - "8080:8080"      # Clientes TCP
-      - "8081:8081/udp"  # Sensores UDP
-      - "9000:9000"      # Atuadores TCP
-    networks:
-      - iot_net
+# O gateway roda nativamente no PC host (não está dockerizado).
+# Configure o IP do host em .env antes de executar:
+#   cp .env.example .env
+#   # edite .env com o IP correto do host
+#   docker compose up -d
 
+services:
   # ---- SENSORES DE TEMPERATURA ----
   temp01:
     build: ./sensor_temp
     container_name: temp01
-    depends_on: [gateway]
     environment:
-      - GATEWAY_ADDR=gateway:8081
+      - GATEWAY_ADDR=${GATEWAY_HOST:-172.17.0.1}:8081
       - SENSOR_ID=temp01
     networks:
       - iot_net
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   temp02:
     build: ./sensor_temp
     container_name: temp02
-    depends_on: [gateway]
     environment:
-      - GATEWAY_ADDR=gateway:8081
+      - GATEWAY_ADDR=${GATEWAY_HOST:-172.17.0.1}:8081
       - SENSOR_ID=temp02
     networks:
       - iot_net
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   # ---- SENSORES DE PRESENÇA ----
   pres01:
     build: ./sensor_pres
     container_name: pres01
-    depends_on: [gateway]
     environment:
-      - GATEWAY_ADDR=gateway:8081
+      - GATEWAY_ADDR=${GATEWAY_HOST:-172.17.0.1}:8081
       - SENSOR_ID=pres01
     networks:
       - iot_net
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   pres02:
     build: ./sensor_pres
     container_name: pres02
-    depends_on: [gateway]
     environment:
-      - GATEWAY_ADDR=gateway:8081
+      - GATEWAY_ADDR=${GATEWAY_HOST:-172.17.0.1}:8081
       - SENSOR_ID=pres02
     networks:
       - iot_net
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   # ---- ATUADORES DE AR-CONDICIONADO ----
   ar01:
     build: ./actuator_ac
     container_name: ar01
-    depends_on: [gateway]
     environment:
-      - GATEWAY_ADDR=gateway:9000
+      - GATEWAY_ADDR=${GATEWAY_HOST:-172.17.0.1}:9000
       - ATUADOR_ID=ar01
     networks:
       - iot_net
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   ar02:
     build: ./actuator_ac
     container_name: ar02
-    depends_on: [gateway]
     environment:
-      - GATEWAY_ADDR=gateway:9000
+      - GATEWAY_ADDR=${GATEWAY_HOST:-172.17.0.1}:9000
       - ATUADOR_ID=ar02
     networks:
       - iot_net
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   # ---- ATUADORES DE ILUMINAÇÃO ----
   luz01:
     build: ./actuator_light
     container_name: luz01
-    depends_on: [gateway]
     environment:
-      - GATEWAY_ADDR=gateway:9000
+      - GATEWAY_ADDR=${GATEWAY_HOST:-172.17.0.1}:9000
       - ATUADOR_ID=luz01
     networks:
       - iot_net
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   luz02:
     build: ./actuator_light
     container_name: luz02
-    depends_on: [gateway]
     environment:
-      - GATEWAY_ADDR=gateway:9000
+      - GATEWAY_ADDR=${GATEWAY_HOST:-172.17.0.1}:9000
       - ATUADOR_ID=luz02
     networks:
       - iot_net
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   # ---- CLIENTE INTERATIVO ----
   client:
     build: ./client
     container_name: client
-    depends_on: [gateway]
     stdin_open: true
     tty: true
     environment:
-      - GATEWAY_ADDR=gateway:8080
+      - GATEWAY_ADDR=${GATEWAY_HOST:-172.17.0.1}:8080
     networks:
       - iot_net
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
 networks:
   iot_net:
