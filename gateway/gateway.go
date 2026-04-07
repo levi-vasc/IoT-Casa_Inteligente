@@ -86,7 +86,7 @@ func startUDPServer(port string) {
 
 		fmt.Printf("[SENSOR] %s (%s): %v\n", data.ID, data.Type, data.Value)
 
-		processarAutomacao(data)
+		processarAutomacao(data, conn, remoteAddr)
 
 		payload, _ := json.Marshal(data)
 		broadcastToClients(payload)
@@ -95,7 +95,7 @@ func startUDPServer(port string) {
 
 // ─── Lógica de automação ──────────────────────────────────────────────────────
 
-func processarAutomacao(data DeviceData) {
+func processarAutomacao(data DeviceData, udpConn *net.UDPConn, sensorAddr *net.UDPAddr) {
 	atuadorID, vinculado := sensorParaAtuador[data.ID]
 	if !vinculado {
 		return
@@ -115,6 +115,9 @@ func processarAutomacao(data DeviceData) {
 		estadoMutex.RLock()
 		ligado := estadoAtuador[atuadorID]
 		estadoMutex.RUnlock()
+
+		// envia o estado do ar para o sensor via UDP (mesma porta)
+		enviarEstadoArParaSensor(udpConn, sensorAddr, atuadorID, ligado)
 
 		if !ligado && temp >= 26.0 {
 			enviarComandoAtuador(atuadorID, true, data.ID)
@@ -138,6 +141,15 @@ func processarAutomacao(data DeviceData) {
 
 		enviarComandoAtuador(atuadorID, ligar, data.ID)
 	}
+}
+
+func enviarEstadoArParaSensor(conn *net.UDPConn, addr *net.UDPAddr, atuadorID string, ligado bool) {
+	if conn == nil || addr == nil {
+		return
+	}
+	msg := DeviceData{ID: atuadorID, Type: "estado", State: ligado}
+	b, _ := json.Marshal(msg)
+	_, _ = conn.WriteToUDP(b, addr)
 }
 
 func enviarComandoAtuador(atuadorID string, estado bool, origem string) {

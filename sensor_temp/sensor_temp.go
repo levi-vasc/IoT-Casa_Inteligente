@@ -7,6 +7,7 @@ import (
 	"math/rand"
 	"net"
 	"os"
+	"sync/atomic"
 	"time"
 )
 
@@ -45,6 +46,17 @@ func consultarArLigado(sensorID, estadoAddr string) bool {
 	return resp.Ligado
 }
 
+func atuadorDoSensor(sensorID string) string {
+	switch sensorID {
+	case "temp01":
+		return "ar01"
+	case "temp02":
+		return "ar02"
+	default:
+		return ""
+	}
+}
+
 func (s *Sensor) SimularTemperatura(gatewayUDPAddr string, intervalo time.Duration) {
 	for {
 		udpConn, err := net.Dial("udp", gatewayUDPAddr)
@@ -53,6 +65,37 @@ func (s *Sensor) SimularTemperatura(gatewayUDPAddr string, intervalo time.Durati
 			time.Sleep(2 * time.Second)
 			continue
 		}
+
+		var arLigado int32 // 0/1
+		atuadorID := atuadorDoSensor(s.ID)
+
+		// listener do estado do ar no mesmo UDP
+		go func() {
+			buf := make([]byte, 1024)
+			for {
+				_ = udpConn.SetReadDeadline(time.Now().Add(5 * time.Second))
+				n, err := udpConn.Read(buf)
+				if ne, ok := err.(net.Error); ok && ne.Timeout() {
+					continue
+				}
+				if err != nil {
+					return
+				}
+
+				var msg struct {
+					ID    string `json:"id"`
+					Type  string `json:"type"`
+					State bool   `json:"state"`
+				}
+				if json.Unmarshal(buf[:n], &msg) == nil && msg.Type == "estado" && msg.ID == atuadorID {
+					if msg.State {
+						atomic.StoreInt32(&arLigado, 1)
+					} else {
+						atomic.StoreInt32(&arLigado, 0)
+					}
+				}
+			}
+		}()
 
 		// Começa numa faixa realista
 		temperatura := 24.0 + rand.Float64()*2.0 // 24..26
@@ -72,6 +115,11 @@ func (s *Sensor) SimularTemperatura(gatewayUDPAddr string, intervalo time.Durati
 				delta -= 0.2
 			} else if temperatura < 20.0 {
 				delta += 0.2
+			}
+
+			// resfriamento gradual quando ar está ligado
+			if atomic.LoadInt32(&arLigado) == 1 {
+				delta -= 0.25
 			}
 
 			temperatura += delta
