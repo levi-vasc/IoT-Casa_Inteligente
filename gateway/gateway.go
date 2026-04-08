@@ -46,6 +46,7 @@ func main() {
 	go startUDPServer(":8081")
 	go startTCPServer(":8080")
 	go startAtuadoresServer(":9000")
+	go startBroadcastLoop()
 
 	fmt.Println("[GATEWAY] Sistema iniciado com sucesso")
 	fmt.Println("[GATEWAY] Sensores (UDP)  -> :8081")
@@ -87,9 +88,6 @@ func startUDPServer(port string) {
 		fmt.Printf("[SENSOR] %s (%s): %v\n", data.ID, data.Type, data.Value)
 
 		processarAutomacao(data, conn, remoteAddr)
-
-		payload, _ := json.Marshal(data)
-		broadcastToClients(payload)
 	}
 }
 
@@ -266,6 +264,17 @@ func handleAtuador(conn net.Conn) {
 	}
 	estadoMutex.Unlock()
 
+	estadoMutex.RLock()
+	estadoAtual := estadoAtuador[atuadorID]
+	estadoMutex.RUnlock()
+
+	cmd := DeviceData{ID: atuadorID, Type: "comando", State: estadoAtual}
+	cmdJSON, _ := json.Marshal(cmd)
+	cmdJSON = append(cmdJSON, '\n')
+	conn.Write(cmdJSON)
+
+	publicarEstadoAtuador(atuadorID, estadoAtual)
+
 	fmt.Printf("[GATEWAY] Atuador registrado: %s (de %s)\n", atuadorID, conn.RemoteAddr())
 
 	// Mantém a goroutine viva — scanner.Scan() retorna false quando a conexão fechar.
@@ -374,4 +383,16 @@ func luzEmOverride(atuadorID string) bool {
 		return false
 	}
 	return true
+}
+
+func startBroadcastLoop() {
+	ticker := time.NewTicker(500 * time.Millisecond) // ajuste conforme necessário
+	for range ticker.C {
+		cacheMutex.RLock()
+		for _, data := range cache {
+			payload, _ := json.Marshal(data)
+			broadcastToClients(payload)
+		}
+		cacheMutex.RUnlock()
+	}
 }
