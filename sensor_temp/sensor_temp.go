@@ -108,7 +108,7 @@ func (s *Sensor) SimularTemperatura(gatewayUDPAddr string, intervalo time.Durati
 
 		for {
 			// Delta pequeno para evitar saltos bruscos
-			delta := (rand.Float64()*2 - 1) * 0.5 // -0.3..+0.3
+			delta := (rand.Float64()*2 - 1) * 0.7 // -0.7..+0.7
 
 			// “Força” suave para voltar ao meio quando estiver nos extremos
 			if temperatura > 33.0 {
