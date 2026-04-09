@@ -16,7 +16,7 @@ services:
     container_name: temp01
     depends_on: [gateway]
     environment:
-      - GATEWAY_ADDR=gateway:8081
+      - GATEWAY_ADDR=${GATEWAY_IP}:8081
       - SENSOR_ID=temp01
     networks:
       - iot_net
@@ -26,7 +26,7 @@ services:
     container_name: temp02
     depends_on: [gateway]
     environment:
-      - GATEWAY_ADDR=gateway:8081
+      - GATEWAY_ADDR=${GATEWAY_IP}:8081
       - SENSOR_ID=temp02
     networks:
       - iot_net
@@ -37,7 +37,7 @@ services:
     container_name: pres01
     depends_on: [gateway]
     environment:
-      - GATEWAY_ADDR=gateway:8081
+      - GATEWAY_ADDR=${GATEWAY_IP}:8081
       - SENSOR_ID=pres01
     networks:
       - iot_net
@@ -47,7 +47,7 @@ services:
     container_name: pres02
     depends_on: [gateway]
     environment:
-      - GATEWAY_ADDR=gateway:8081
+      - GATEWAY_ADDR=${GATEWAY_IP}:8081
       - SENSOR_ID=pres02
     networks:
       - iot_net
@@ -58,7 +58,7 @@ services:
     container_name: ar01
     depends_on: [gateway]
     environment:
-      - GATEWAY_ADDR=gateway:9000
+      - GATEWAY_ADDR=${GATEWAY_IP}:9000
       - ATUADOR_ID=ar01
     networks:
       - iot_net
@@ -68,7 +68,7 @@ services:
     container_name: ar02
     depends_on: [gateway]
     environment:
-      - GATEWAY_ADDR=gateway:9000
+      - GATEWAY_ADDR=${GATEWAY_IP}:9000
       - ATUADOR_ID=ar02
     networks:
       - iot_net
@@ -79,7 +79,7 @@ services:
     container_name: luz01
     depends_on: [gateway]
     environment:
-      - GATEWAY_ADDR=gateway:9000
+      - GATEWAY_ADDR=${GATEWAY_IP}:9000
       - ATUADOR_ID=luz01
     networks:
       - iot_net
@@ -89,7 +89,7 @@ services:
     container_name: luz02
     depends_on: [gateway]
     environment:
-      - GATEWAY_ADDR=gateway:9000
+      - GATEWAY_ADDR=${GATEWAY_IP}:9000
       - ATUADOR_ID=luz02
     networks:
       - iot_net
@@ -102,7 +102,7 @@ services:
     stdin_open: true
     tty: true
     environment:
-      - GATEWAY_ADDR=gateway:8080
+      - GATEWAY_ADDR=${GATEWAY_IP}:8080
     networks:
       - iot_net
 
