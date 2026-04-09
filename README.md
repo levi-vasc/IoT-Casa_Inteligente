@@ -8,6 +8,8 @@ O **IoT Casa Inteligente** é um projeto desenvolvido em **Go** (com suporte via
 
 Na simulação, cada entidade atua de maneira independente, com seu próprio ciclo de execução e responsabilidades, refletindo o comportamento típico de dispositivos IoT no mundo real. Essa independência permite exercitar, de forma prática, os principais desafios do domínio: concorrência (várias entidades executando simultaneamente), conectividade (troca de mensagens/dados entre componentes) e coordenação (garantir consistência e respostas corretas mesmo com eventos ocorrendo em paralelo).
 
+---
+
 ## Arquitetura
 
 A simulação segue um modelo de casa inteligente com gateway central: as **entidades** (sensores e atuadores) executam de forma independente e concorrente, enquanto o **servidor** atua como controlador e ponto de integração, recebendo mensagens via rede (**TCP/UDP**), mantendo o estado do ambiente e coordenando comandos/respostas.
@@ -28,15 +30,46 @@ A simulação segue um modelo de casa inteligente com gateway central: as **enti
   * Permite ligar/desligar atuadores, enviando comandos ao gateway
   * Se comunica com o gateway via **TCP** e pode também receber/consultar atualizações
 
-### Diagrama
+### Visão geral
 
 <p align="center">
  <img width="410" height="250" alt="dg_redes" src="https://github.com/user-attachments/assets/001bebc9-f539-4821-8cc2-152c7175a19f" />
 </p>
 
-* temp01
+#### 1. Sensores
 
-      
+| SENSOR_ID | Função | Valores |
+| --- | --- | --- |
+| temp01 | Envia dados da temperatura do quarto 1 para o servidor | 18 a 35° |
+| temp02 | Envia dados da temperatura do quarto 2 para o servidor | 18 a 35° |
+| pres01 | Detecta presença no quarto 1 e envia valor para o servidor | 0 ou 1 |
+| pres02 | Detecta presença no quarto 2 e envia valor para o servidor | 0 ou 1 |
+
+>[!NOTE]
+> Os sensores de temperatura geram leituras com **baixa variância**, variando lentamente ao longo do tempo. Quando o ar condicionado é ligado, os valores decrescem gradativamente. Para isso, eles recebem a informação de estado do atuador através da porta `:8080`
+
+#### 2. Atuadores
+
+| ATUADOR_ID | Função | Condição LIGADO | Condição DESLIGADO |
+| --- | --- | --- | --- |
+| ar01 | Resfriar quarto 1 quando necessário | temp01 >= 26° | temp01 <= 20° |
+| ar02 | Resfriar quarto 2 quando necessário | temp02 >= 26° | temp02 <= 20° |
+| luz01 | Lâmpada do quarto 1 ascende | pres01 = 1 | pres01 = 0 |
+| luz02 | Lâmpada do quarto 2 ascende | pres02 = 1 | pres02 = 0 |
+
+#### 3. Gateway
+
+| Porta | Tipo | Propósito |
+| --- | --- | --- |
+| 8081 | UDP | Recebimento de dados dos sensores, envio do estado do AC para sensores de temperatura |
+| 8080 | TCP | Comunicação com o cliente |
+| 9000 | TCP | Envio/recebimento de dados para os atuadores | 
+
+#### 4. Cliente
+
+O cliente é a entidade responsável por **monitorar** e **interagir** com a casa inteligente. Ele consulta o **gateway** para exibir, no terminal, a lista de sensores/atuadores e seus estados atuais, e permite ligar/desligar atuadores manualmente, enviando comandos ao servidor. No sistema, mais de um cliente pode atuar simulataneamente.
+
+---
 
  ## Configuração do ambiente
 
@@ -59,6 +92,8 @@ cd IoT-Casa_Inteligente
 
 > [!IMPORTANT]
 > No arquivo `.env` do projeto, defina a variável `GATEWAY_IP` como o IP da máquina do servidor!
+
+---
 
 ## Modo de uso
 
@@ -133,5 +168,3 @@ luz02 DESLIGADA
 Digite o ID do atuador:
 (1 - Ligar, 2- Desligar):
 ```
-
-O sistema foi projetado para ter a possibilidade de haver mais de um cliente simultaneamente.
