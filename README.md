@@ -20,6 +20,104 @@ A simulação segue um modelo de casa inteligente com gateway central: as **enti
       * Cada dispositivo roda em seu próprio fluxo de execução (goroutine)
   * Gateway/Servidor
       * Recebe e processa mensagens dos dispositivos via TCP/UDP
-      * Mantém um estado consolidado (últimas leituras, estado de atuadores, disponibilidade/conexão).
+      * Mantém um estado consolidado (últimas leituras, estado de atuadores, disponibilidade/conexão)
       * Aplica regras e envia comandos aos atuadores
-      * Funciona como a "ponte" entre conectividade e lógica do sistema   
+      * Funciona como a "ponte" entre conectividade e lógica do sistema
+
+ ## Configuração do ambiente
+
+ ### Requisitos
+  * Go instalado (Versão utilizada: 1.22)
+  * Docker e Docker Compose para executar em contêiner
+
+ ### Clonar o repositório
+
+ ```
+ git clone https://github.com/levi-vasc/IoT-Casa_Inteligente.git
+cd IoT-Casa_Inteligente
+ ```
+
+### Parâmetros de rede
+ * Host do gateway (`GATEWAY_IP`): IP da máquina do servidor
+ * Porta sensores: 8081 - UDP
+ * Porta atuadores: 9000 - TCP
+ * Porta cliente: 8080 - TCP
+
+> [!IMPORTANT]
+> No arquivo `.env` do projeto, defina a variável `GATEWAY_IP` como o IP da máquina do servidor!
+
+## Modo de uso
+
+> [!NOTE]
+> Com o Docker, é possível rodar o sistema tanto em um computador quanto em computadores diferentes para cada entidade. Nesta seção, consideramos que o usuário quer rodar o servidor em uma máquina e rodar o restante dos serviços em outra.
+
+### 1) Executar servidor
+
+Em um terminal, no diretório do projeto:
+
+```
+docker compose up -d gateway
+```
+
+### 2) Executar dispositivos
+
+No terminal de outro computador, no diretório do projeto:
+
+```
+docker compose up -d
+docker compose run client
+```
+
+### 3) Menu do cliente
+
+Ao executar o cliente, aparecerá no terminal um menu com opções:
+
+```
+Casa Inteligente
+
+1. Visualizar sensores
+2. Visualizar atuadores
+3. Ligar/Desligar atuadores
+0. Sair
+```
+
+Escolhendo a opção 1, é possível visualizar os dados enviados por `temp01`, `temp02`, `pres01` e `pres02` em tempo real. Um exemplo:
+
+```
+Sensores - Tempo Real
+
+temp01 22.3º
+temp02 27.5º
+
+pres01 Presente
+pres02 Ausente
+```
+
+Na opção 2, podemos ver o estado dos atuadores:
+
+```
+Atuadores
+
+ar01 DESLIGADO
+ar02 LIGADO
+
+luz01 LIGADA
+luz02 DESLIGADA
+```
+
+Ainda há a opção 3, que é interativa. É nela que o cliente pode desligar ou ligar atuadores manualmente:
+
+```
+Controle de usuário
+
+ar01 DESLIGADO
+ar02 LIGADO
+
+luz01 LIGADA
+luz02 DESLIGADA
+
+Digite o ID do atuador:
+(1 - Ligar, 2- Desligar):
+```
+
+O sistema foi projetado para ter a possibilidade de haver mais de um cliente simultaneamente.
