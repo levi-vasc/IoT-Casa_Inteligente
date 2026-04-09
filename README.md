@@ -1,4 +1,4 @@
-# IoT---Rota-das-Coisas
+# IoT-Casa_Inteligente
 
 Este projeto é a primeira etapa do problema de MI de Concorrência e Conectividade, semestre 2026.1, da Universidade Estadual de Feira de Santana (UEFS). Ele consiste na simulação de uma casa inteligente, na qual cada entidade (sensores, atuadores e demais componentes) atua de maneira independente, comunicando-se por meio de mecanismos de conectividade definidos pela aplicação. O objetivo é exercitar conceitos de concorrência, comunicação e coordenação entre componentes autônomos em um ambiente de IoT.
 
@@ -23,6 +23,20 @@ A simulação segue um modelo de casa inteligente com gateway central: as **enti
       * Mantém um estado consolidado (últimas leituras, estado de atuadores, disponibilidade/conexão)
       * Aplica regras e envia comandos aos atuadores
       * Funciona como a "ponte" entre conectividade e lógica do sistema
+* Cliente
+  * Interface do usuário para visualizar sensores e atuadores e seus estados atuais
+  * Permite ligar/desligar atuadores, enviando comandos ao gateway
+  * Se comunica com o gateway via **TCP** e pode também receber/consultar atualizações
+
+### Diagrama
+
+<p align="center">
+ <img width="410" height="250" alt="dg_redes" src="https://github.com/user-attachments/assets/001bebc9-f539-4821-8cc2-152c7175a19f" />
+</p>
+
+* temp01
+
+      
 
  ## Configuração do ambiente
 
