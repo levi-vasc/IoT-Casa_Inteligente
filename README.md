@@ -19,7 +19,7 @@ A simulação segue um modelo de casa inteligente com gateway central: as **enti
   * Dispositivos
       * Sensores: produzem eventos e enviam ao gateway (presença e temperatura)
       * Atuadores: recebem comandos do gateway e alteram seu estado (lâmpadas e ares-condicionados)
-      * Cada dispositivo roda em seu próprio fluxo de execução (goroutine)
+      * Cada dispositivo roda em seu próprio fluxo de execução (goroutine) e envia dados em um intervalo de **1 segundo**
   * Gateway/Servidor
       * Recebe e processa mensagens dos dispositivos via TCP/UDP
       * Mantém um estado consolidado (últimas leituras, estado de atuadores, disponibilidade/conexão)
@@ -90,17 +90,25 @@ cd IoT-Casa_Inteligente
  * Porta atuadores: 9000 - TCP
  * Porta cliente: 8080 - TCP
 
-> [!IMPORTANT]
-> No arquivo `.env` do projeto, defina a variável `GATEWAY_IP` como o IP da máquina do servidor!
+### Arquivo 
 
 ---
 
 ## Modo de uso
 
-> [!NOTE]
-> Com o Docker, é possível rodar o sistema tanto em um computador quanto em computadores diferentes para cada entidade. Nesta seção, consideramos que o usuário quer rodar o servidor em uma máquina e rodar o restante dos serviços em outra.
+> [!IMPORTANT]
+> Para rodar o sistema em máquinas diferentes, certifique-se de que ambas estejam na mesma rede local e que o firewall permita conexões nas portas utilizadas.
 
-### 1) Executar servidor
+### 1) Configuração (Caso use máquinas diferentes)
+
+Antes de iniciar, informe aos dispositivos o endereço IP da máquina que executará o **Gateway**. No arquivo `.env` da máquina dos dispositivos, altere:
+
+```
+# Exemplo
+GATEWAY_IP=172.16.103.10
+```
+
+### 2) Executar servidor (Máquina A)
 
 Em um terminal, no diretório do projeto:
 
@@ -108,16 +116,16 @@ Em um terminal, no diretório do projeto:
 docker compose up -d gateway
 ```
 
-### 2) Executar dispositivos
+### 3) Executar dispositivos (Máquina B)
 
-No terminal de outro computador, no diretório do projeto:
+No terminal de outro computador, inicie os dispositivos:
 
 ```
 docker compose up -d
 docker compose run client
 ```
 
-### 3) Menu do cliente
+### 4) Menu do cliente
 
 Ao executar o cliente, aparecerá no terminal um menu com opções:
 
@@ -168,3 +176,37 @@ luz02 DESLIGADA
 Digite o ID do atuador:
 (1 - Ligar, 2- Desligar):
 ```
+
+---
+
+## Testes
+
+Durante os testes, foi possível **visualizar os dados** de sensores e atuadores e **controlar manualmente** o estado dos atuadores, com atualização em tempo real.
+
+O principal problema observado está relacionado à **reconexão do cliente com o gateway**: se o gateway cair, o cliente detecta a desconexão (mensagem exibida no terminal), porém **não volta a receber atualizações** quando o gateway é iniciado novamente. Após a queda, os dados permanecem congelados mesmo com o servidor operando normalmente.
+
+### 1. Tela inicial com o servidor conectado
+
+<p align="center">
+ <img width="311" height="285" alt="image" src="https://github.com/user-attachments/assets/a3eb2831-d036-4de1-a38a-f67f18718693" />
+<p/> 
+
+### 2. Desconectando o servidor
+
+```
+docker compose down gateway
+```
+
+### 3. Tela inicial com o servidor desconectado
+
+<p align="center">
+ <img width="313" height="277" alt="image" src="https://github.com/user-attachments/assets/54e9ac3b-0850-412f-8636-fb7d3333fdf5" />
+<p/> 
+
+### 4. Reconectando o servidor
+
+```
+docker compose up gateway
+``` 
+
+Mesmo após a reconexão, o cliente ainda mostra o servidor como desconectado, e os dados continuam congelados. Isso é um **ponto de melhoria futuro** (ex.: implementar estratégia de reconexão/backoff e re-sincronização de estado).
