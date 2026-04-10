@@ -3,12 +3,12 @@
 Este projeto é a primeira etapa do problema de MI de Concorrência e Conectividade, semestre 2026.1, da Universidade Estadual de Feira de Santana (UEFS). Ele consiste na simulação de uma casa inteligente, na qual cada entidade (sensores, atuadores e demais componentes) atua de maneira independente, comunicando-se por meio de mecanismos de conectividade definidos pela aplicação. O objetivo é exercitar conceitos de concorrência, comunicação e coordenação entre componentes autônomos em um ambiente de IoT.
 
 ## Índice
-- [Descrição do Projeto](#descricao-do-projeto)
-- [Arquitetura](#arquitetura)
-- [Estrutura de Comunicação e Mensagens](#estrutura-de-comunicação-e-mensagem)
-- [Configuração do Ambiente](#configuração-do-ambiente)
-- [Modo de Uso](#modo-de-uso)
-- [Testes](#testes)
+- [Descrição do Projeto](#-descricao-do-projeto)
+- [Arquitetura](#-arquitetura)
+- [Estrutura de Comunicação e Mensagens](#-estrutura-de-comunicação-e-mensagem)
+- [Configuração do Ambiente](#-configuração-do-ambiente)
+- [Modo de Uso](#-modo-de-uso)
+- [Testes](#-testes)
 
 ---
 
