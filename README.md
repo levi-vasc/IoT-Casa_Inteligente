@@ -2,7 +2,17 @@
 
 Este projeto é a primeira etapa do problema de MI de Concorrência e Conectividade, semestre 2026.1, da Universidade Estadual de Feira de Santana (UEFS). Ele consiste na simulação de uma casa inteligente, na qual cada entidade (sensores, atuadores e demais componentes) atua de maneira independente, comunicando-se por meio de mecanismos de conectividade definidos pela aplicação. O objetivo é exercitar conceitos de concorrência, comunicação e coordenação entre componentes autônomos em um ambiente de IoT.
 
-## Descrição do Projeto
+## Índice
+- [Descrição do Projeto](#descrição-do-projeto)
+- [Arquitetura](# arquitetura)
+- [Estrutura de Comunicação e Mensagens](#estrutura-de-comunicação-e-mensagem)
+- [Configuração do Ambiente](#configuração-do-ambiente)
+- [Modo de Uso](#modo-de-uso)
+- [Testes](#testes)
+
+---
+
+## 📝 Descrição do Projeto
 
 O **IoT Casa Inteligente** é um projeto desenvolvido em **Go** (com suporte via **Docker**) para construir uma solução de automação residencial baseada em Internet das Coisas (IoT). O objetivo é integrar e controlar dispositivos e sensores de uma casa (iluminação, presença, temperatura, ar condicionado) por meio de uma aplicação central, permitindo monitoramento em **tempo real**, **automatizações** e **acionamentos remotos** de forma organizada e escalável.
 
@@ -10,7 +20,7 @@ Na simulação, cada entidade atua de maneira independente, com seu próprio cic
 
 ---
 
-## Arquitetura
+## 🏗️ Arquitetura
 
 A simulação segue um modelo de casa inteligente com gateway central: as **entidades** (sensores e atuadores) executam de forma independente e concorrente, enquanto o **servidor** atua como controlador e ponto de integração, recebendo mensagens via rede (**TCP/UDP**), mantendo o estado do ambiente e coordenando comandos/respostas.
 
@@ -25,15 +35,15 @@ A simulação segue um modelo de casa inteligente com gateway central: as **enti
       * Mantém um estado consolidado (últimas leituras, estado de atuadores, disponibilidade/conexão)
       * Aplica regras e envia comandos aos atuadores
       * Funciona como a "ponte" entre conectividade e lógica do sistema
-* Cliente
-  * Interface do usuário para visualizar sensores e atuadores e seus estados atuais
-  * Permite ligar/desligar atuadores, enviando comandos ao gateway
-  * Se comunica com o gateway via **TCP** e pode também receber/consultar atualizações
+  * Cliente
+      * Interface do usuário para visualizar sensores e atuadores e seus estados atuais
+      * Permite ligar/desligar atuadores, enviando comandos ao gateway
+      * Se comunica com o gateway via **TCP** e pode também receber/consultar atualizações
 
 ### Visão geral
 
 <p align="center">
- <img width="410" height="250" alt="dg_redes" src="https://github.com/user-attachments/assets/001bebc9-f539-4821-8cc2-152c7175a19f" />
+ <img width="574" height="262" alt="dg_redes" src="https://github.com/user-attachments/assets/58020a1d-a759-44c6-946c-79a89c0c2649" />
 </p>
 
 #### 1. Sensores
@@ -71,7 +81,42 @@ O cliente é a entidade responsável por **monitorar** e **interagir** com a cas
 
 ---
 
- ## Configuração do ambiente
+## 📨 Estrutura de Comunicação e Mensagens
+
+Para garantir que o gateway compreenda as informações vindas de diferentes dispositivos, utilizamos um protocolo de mensagens padronizado em **JSON** via sockets.
+
+* Formato dos pacotes (sensores para gateway)
+
+```json
+{
+  "id": "temp01",
+  "tipo": "temperatura",
+  "valor": 24.5
+}
+```
+
+* Formato dos comandos (gateway para atuadores)
+
+```json
+{
+  "id": "luz01",
+  "type": "comando",
+  "state": true
+}
+```
+
+* Formato da notificação (estado do atuador)
+
+```json
+{
+  "id": "ar01",
+  "type": "estado",
+  "state": true
+}
+```
+---
+
+ ## ⚙️ Configuração do Ambiente
 
  ### Requisitos
   * Go instalado (Versão utilizada: 1.22)
@@ -90,11 +135,18 @@ cd IoT-Casa_Inteligente
  * Porta atuadores: 9000 - TCP
  * Porta cliente: 8080 - TCP
 
-### Arquivo 
+### Arquivo .env
+
+Na raíz do projeto, há um arquivo `.env` que define a variável `GATEWAY_IP`. Essa variável deve ser alterada para o **IP da máquina do servidor**.
+
+```
+# Exemplo
+GATEWAY_IP=172.16.103.10
+```
 
 ---
 
-## Modo de uso
+## ▶️ Modo de Uso
 
 > [!IMPORTANT]
 > Para rodar o sistema em máquinas diferentes, certifique-se de que ambas estejam na mesma rede local e que o firewall permita conexões nas portas utilizadas.
@@ -179,7 +231,7 @@ Digite o ID do atuador:
 
 ---
 
-## Testes
+## 🧪 Testes
 
 Durante os testes, foi possível **visualizar os dados** de sensores e atuadores e **controlar manualmente** o estado dos atuadores, com atualização em tempo real.
 
@@ -189,7 +241,7 @@ O principal problema observado está relacionado à **reconexão do cliente com 
 
 <p align="center">
  <img width="311" height="285" alt="image" src="https://github.com/user-attachments/assets/a3eb2831-d036-4de1-a38a-f67f18718693" />
-<p/> 
+</p> 
 
 ### 2. Desconectando o servidor
 
@@ -201,7 +253,7 @@ docker compose down gateway
 
 <p align="center">
  <img width="313" height="277" alt="image" src="https://github.com/user-attachments/assets/54e9ac3b-0850-412f-8636-fb7d3333fdf5" />
-<p/> 
+</p> 
 
 ### 4. Reconectando o servidor
 
