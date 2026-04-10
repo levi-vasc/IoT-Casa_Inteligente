@@ -4,7 +4,7 @@ Este projeto é a primeira etapa do problema de MI de Concorrência e Conectivid
 
 ## Índice
 - [Descrição do Projeto](#descrição-do-projeto)
-- [Arquitetura](# arquitetura)
+- [Arquitetura](#arquitetura)
 - [Estrutura de Comunicação e Mensagens](#estrutura-de-comunicação-e-mensagem)
 - [Configuração do Ambiente](#configuração-do-ambiente)
 - [Modo de Uso](#modo-de-uso)
