@@ -46,6 +46,7 @@ func main() {
 	go startUDPServer(":8081")
 	go startTCPServer(":8080")
 	go startAtuadoresServer(":9000")
+	go startBroadcastLoop()
 
 	fmt.Println("[GATEWAY] Sistema iniciado com sucesso")
 	fmt.Println("[GATEWAY] Sensores (UDP)  -> :8081")
@@ -87,9 +88,6 @@ func startUDPServer(port string) {
 		fmt.Printf("[SENSOR] %s (%s): %v\n", data.ID, data.Type, data.Value)
 
 		processarAutomacao(data, conn, remoteAddr)
-
-		payload, _ := json.Marshal(data)
-		broadcastToClients(payload)
 	}
 }
 
@@ -374,4 +372,17 @@ func luzEmOverride(atuadorID string) bool {
 		return false
 	}
 	return true
+}
+
+// Envio de cache em intervalos fixos
+func startBroadcastLoop() {
+	ticker := time.NewTicker(500 * time.Millisecond) // ajuste conforme necessário
+	for range ticker.C {
+		cacheMutex.RLock()
+		for _, data := range cache {
+			payload, _ := json.Marshal(data)
+			broadcastToClients(payload)
+		}
+		cacheMutex.RUnlock()
+	}
 }
