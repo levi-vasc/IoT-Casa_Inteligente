@@ -264,6 +264,17 @@ func handleAtuador(conn net.Conn) {
 	}
 	estadoMutex.Unlock()
 
+	estadoMutex.RLock()
+	estadoAtual := estadoAtuador[atuadorID]
+	estadoMutex.RUnlock()
+
+	cmd := DeviceData{ID: atuadorID, Type: "comando", State: estadoAtual}
+	cmdJSON, _ := json.Marshal(cmd)
+	cmdJSON = append(cmdJSON, '\n')
+	conn.Write(cmdJSON)
+
+	publicarEstadoAtuador(atuadorID, estadoAtual)
+
 	fmt.Printf("[GATEWAY] Atuador registrado: %s (de %s)\n", atuadorID, conn.RemoteAddr())
 
 	// Mantém a goroutine viva — scanner.Scan() retorna false quando a conexão fechar.
@@ -374,7 +385,6 @@ func luzEmOverride(atuadorID string) bool {
 	return true
 }
 
-// Envio de cache em intervalos fixos
 func startBroadcastLoop() {
 	ticker := time.NewTicker(500 * time.Millisecond) // ajuste conforme necessário
 	for range ticker.C {
